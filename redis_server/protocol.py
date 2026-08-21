@@ -1,7 +1,8 @@
 """Helpers for decoding requests and encoding RESP responses."""
 
-NIL = b"$-1\r\n"
-EMPTY_ARRAY = b"*0\r\n"
+NIL: bytes = b"$-1\r\n"
+EMPTY_ARRAY: bytes = b"*0\r\n"
+OK: bytes = b"+OK\r\n"
 
 
 def parse_resp(data: str) -> list[str]:

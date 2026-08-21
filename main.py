@@ -2,12 +2,7 @@
 
 import logging
 
-from redis_server import DATABASE, RedisServer, handle_connection, parse_resp
-from redis_server.protocol import EMPTY_ARRAY, NIL
-
-# Keep the original public names available for existing imports.
-db = DATABASE
-EMPTY_ARR = EMPTY_ARRAY
+from redis_server import RedisServer
 
 
 def main() -> None:
