@@ -2,11 +2,10 @@ import random
 
 
 class Node:
-    def __init__(self, member: str, score: float):
+    def __init__(self, member: str, score: float, height: int):
         self.member = member
         self.score = score
-        self.next: Node | None = None
-        self.levels = []
+        self.levels: list[None | Node] = [None] * height
 
     def __str__(self):
         return f"{self.member}({self.score})"
@@ -14,11 +13,10 @@ class Node:
 
 class SkipList:
     def __init__(self):
-        # self.head: Node | None = None
         self.MAX_LEVEL = 4
         self.P = 0.5
-        self.levels: list[Node | None] = [None] * self.MAX_LEVEL
         self.level = 1
+        self.HEAD = Node(member="", score=0, height=self.MAX_LEVEL)
 
     def _level(self) -> int:
         lvl = 1
@@ -32,38 +30,39 @@ class SkipList:
 
         level = self._level()
         self.level = max(self.level, level)
+
+        new_node = Node(member, score, level)
         for i in range(level - 1, -1, -1):
-            node = Node(member, score)
-            curr_ll = self.levels[i]
-            if curr_ll is None:
-                self.levels[i] = node
-            else:
-                temp = curr_ll
+            pointer = self.HEAD.levels[i]
 
-                while temp.next is not None:
-                    temp = temp.next
+            if pointer is None:
+                self.HEAD.levels[i] = new_node
+                continue
 
-                temp.next = node
-                self.levels[i] = curr_ll
+            while True:
+                next_node = pointer.levels[i]
+
+                if next_node is None:
+                    break
+
+                pointer = next_node
+
+            pointer.levels[i] = new_node
+
+        # Print loop for priting only one element in skip list
 
     def print(self):
 
-        count = 3
-        for lvl in range(len(self.levels)):
-            buff = f"level :{count - lvl} header --> "
-            node = self.levels[count - lvl]
-            if node is None:
-                buff += "nil"
-                print(buff)
-                continue
+        for i in range(len(self.HEAD.levels) - 1, -1, -1):
+            print(f"level {i}: HEAD", end="")
 
-            temp = node
-            while temp.next is not None:
-                buff += f"{temp.member}({temp.score}) --> "
-                temp = temp.next
-            buff += f"{temp.member}({temp.score}) --> "
-            buff += "nil"
-            print(buff)
+            pointer = self.HEAD.levels[i]
+
+            while pointer is not None:
+                print(f" -> {pointer}", end="")
+                pointer = pointer.levels[i]
+
+            print(" -> nil")
 
 
 sk = SkipList()
