@@ -1,6 +1,7 @@
 """TCP server lifecycle and connection handling."""
 
 import logging
+import os
 import socket
 import threading
 
@@ -40,6 +41,7 @@ def handle_connection(
                 client_connection.sendall(command_processor.execute(parts))
     except ConnectionResetError:
         LOGGER.warning("Connection abruptly lost: %s", client_address)
+
     finally:
         client_connection.close()
         LOGGER.info("Client disconnected: %s", client_address)
@@ -60,6 +62,10 @@ class RedisServer:
 
     def serve_forever(self) -> None:
         """Accept clients until the process receives a keyboard interrupt."""
+        LOGGER.info("SERVER STARTED RUNNING")
+        LOGGER.info("SERVER IS READY TO ACCEPT CONNECTION")
+        LOGGER.info("RUNNING AT PORT 6379")
+        LOGGER.info(f"PID {os.getpid()}")
         server = socket.create_server((self.host, self.port), reuse_port=True)
         try:
             while True:

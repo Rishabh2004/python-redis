@@ -12,8 +12,8 @@ class Node:
 
 
 class SkipList:
-    def __init__(self):
-        self.MAX_LEVEL = 4
+    def __init__(self, max_level: int = 16):
+        self.MAX_LEVEL = max_level
         self.P = 0.5
         self.level = 1
         self.HEAD = Node(member="", score=0, height=self.MAX_LEVEL)
@@ -58,8 +58,6 @@ class SkipList:
             new_node.levels[i] = pointer.levels[i]
             pointer.levels[i] = new_node
 
-        # Print loop for priting only one element in skip list
-
     def print(self):
 
         for i in range(len(self.HEAD.levels) - 1, -1, -1):
@@ -72,13 +70,3 @@ class SkipList:
                 pointer = pointer.levels[i]
 
             print(" -> nil")
-
-
-sk = SkipList()
-sk.add("A", 10)
-sk.add("B", 5)
-sk.add("C", 3)
-sk.add("D", 20)
-
-
-sk.print()

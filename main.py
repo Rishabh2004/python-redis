@@ -2,11 +2,15 @@
 
 import logging
 
-from redis_server import RedisServer
+from src import RedisServer
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(levelname)s] %(asctime)s * %(message)s",
+        datefmt="%d-%m-%Y %H:%M:%S",
+    )
     RedisServer().serve_forever()
 
 

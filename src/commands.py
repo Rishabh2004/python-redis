@@ -4,6 +4,8 @@ import threading
 import time
 from collections.abc import Callable
 
+from src.skiplist import SkipList
+
 from .protocol import (
     EMPTY_ARRAY,
     NIL,
@@ -48,6 +50,8 @@ class CommandProcessor:
             "llen": self._llen,
             "lpop": self._lpop,
             "blpop": self._blpop,
+            "zadd": self._zadd,
+            "print": self._print,
         }
 
     def execute(self, parts: list[str]) -> bytes:
@@ -265,3 +269,26 @@ class CommandProcessor:
             entry["value"].pop(0)
 
             return encode_array(shared_buff.pop(0))
+
+    def _print(self, arguements: list[str]):
+        print(self.database)
+        return OK
+
+    def _zadd(self, arguements: list[str]):
+        args_len = len(arguements)
+
+        if args_len != 3:
+            return NIL
+
+        key = arguements[0]
+        score = float(arguements[1])
+        member = arguements[2]
+
+        sset = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
+
+        if not isinstance(sset["value"], SkipList):
+            raise TypeError("Stored value is not a SortedSet")
+
+        sset["value"].add(member, score)
+
+        return encode_integer(1)
