@@ -39,14 +39,23 @@ class SkipList:
                 self.HEAD.levels[i] = new_node
                 continue
 
+            if pointer.score >= score:
+                new_node.levels[i] = pointer
+                self.HEAD.levels[i] = new_node
+                continue
+
             while True:
                 next_node = pointer.levels[i]
 
                 if next_node is None:
                     break
 
+                if next_node.score >= score:
+                    break
+
                 pointer = next_node
 
+            new_node.levels[i] = pointer.levels[i]
             pointer.levels[i] = new_node
 
         # Print loop for priting only one element in skip list
