@@ -52,6 +52,10 @@ class CommandProcessor:
             "blpop": self._blpop,
             "zadd": self._zadd,
             "print": self._print,
+            "zrank": self._zrank,
+            "zrange": self._zrange,
+            "zcard": self._zcard,
+            "zscore": self._zscore,
         }
 
     def execute(self, parts: list[str]) -> bytes:
@@ -170,10 +174,9 @@ class CommandProcessor:
 
         if start < 0:
             start = len(values) + start
-            print(start)
+
         if end < 0:
             end = len(values) + end + 1
-            print(end)
         end = min(end, len(values))
         response = f"*{end - start}\r\n".encode()
         for index in range(start, end):
@@ -249,7 +252,7 @@ class CommandProcessor:
         entry = self.database.setdefault(key, {"value": []})
 
         if not isinstance(entry["value"], list):
-            raise TypeError("Stored value is not a list")
+            return NIL
 
         if len(entry["value"]) > 0:
             return encode_bulk_string(str(entry["value"].pop(0)))
@@ -270,11 +273,11 @@ class CommandProcessor:
 
             return encode_array(shared_buff.pop(0))
 
-    def _print(self, arguements: list[str]):
+    def _print(self, _: list[str]):
         print(self.database)
         return OK
 
-    def _zadd(self, arguements: list[str]):
+    def _zadd(self, arguements: list[str]) -> bytes:
         args_len = len(arguements)
 
         if args_len != 3:
@@ -284,11 +287,106 @@ class CommandProcessor:
         score = float(arguements[1])
         member = arguements[2]
 
-        sset = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
+        sset: StoredValue = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
+        if not isinstance(sset["value"], SkipList):
+            return NIL
 
+        found_member = sset["value"].get_score(member)
+
+        if found_member is None:
+            sset["value"].add(member, score)
+            return encode_integer(1)
+
+        return encode_integer(0)
+
+    def _zrank(self, arguements: list[str]) -> bytes:
+        if len(arguements) != 2:
+            return NIL
+
+        key = arguements[0]
+        member = arguements[1]
+
+        sset = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
         if not isinstance(sset["value"], SkipList):
             raise TypeError("Stored value is not a SortedSet")
 
-        sset["value"].add(member, score)
+        member_node_score = sset["value"].get_score(member)
 
-        return encode_integer(1)
+        if member_node_score is None:
+            return NIL
+        else:
+            _, rank = sset["value"].search(member, member_node_score)
+            return encode_integer(rank)
+
+    def _zrange(self, arguements: list[str]) -> bytes:
+        if len(arguements) < 3:
+            return NIL
+
+        key = arguements[0]
+        start, end = int(arguements[1]), int(arguements[2])
+
+        sset = self.database.get(key, None)
+        if sset is None:
+            return EMPTY_ARRAY
+
+        if not isinstance(sset["value"], SkipList):
+            return NIL
+
+        if start > sset["value"].elements:
+            return NIL
+
+        if start > end > 0:
+            return EMPTY_ARRAY
+
+        if start < 0:
+            start = sset["value"].elements + start
+
+        if end < 0:
+            end = sset["value"].elements + end
+
+        end = min(end, sset["value"].elements)
+
+        result = []
+        idx = 0
+        pointer = sset["value"].HEAD.levels[0]
+        while pointer is not None and idx <= end:
+            if idx >= start:
+                result.append(pointer.member)
+
+            pointer = pointer.levels[0]
+            idx += 1
+        print(result)
+        return encode_array(result)
+
+    def _zcard(self, arguements: list[str]) -> bytes:
+        if len(arguements) != 1:
+            return NIL
+        key = arguements[0]
+
+        sset = self.database.get(key, None)
+        if sset is None:
+            return encode_integer(0)
+
+        if not isinstance(sset["value"], SkipList):
+            return encode_integer(0)
+
+        return encode_integer(sset["value"].elements)
+
+    def _zscore(self, arguements: list[str]) -> bytes:
+        if len(arguements) != 2:
+            return NIL
+        key = arguements[0]
+        member = arguements[1]
+        sset = self.database.get(key, None)
+        if sset is None:
+            return NIL
+
+        if not isinstance(sset["value"], SkipList):
+            return NIL
+
+        member_score = sset["value"].get_score(member)
+
+        if member_score is None:
+            return NIL
+
+        return encode_bulk_string(str(member_score))

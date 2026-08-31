@@ -1,3 +1,12 @@
 #!/usr/bin/env sh
 
-printf '*2\r\n$4\r\necHo\r\n$5\r\nhello\r\n' | nc -w 2 127.0.0.1 6379
+# start the server in the background
+uv run main.py > server.log 2>&1 &
+SERVER_PID=$!
+
+sleep 1
+
+# now only redis-cli output shows up here
+redis-cli < COMMANDS
+
+kill $SERVER_PID
