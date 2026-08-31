@@ -7,6 +7,6 @@ SERVER_PID=$!
 sleep 1
 
 # now only redis-cli output shows up here
-redis-cli < COMMANDS
+redis-cli < COMMANDS.txt
 
 kill $SERVER_PID

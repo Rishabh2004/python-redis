@@ -1,0 +1,12 @@
+ZADD racer_scores 8.3 "Sam-Bodden"
+
+ZADD racer_scores 10.5 "Royce"
+
+
+ZREM racer_scores "Royce"
+
+
+ZRANGE racer_scores 0 -1
+
+
+ZREM racer_scores "missing_member"

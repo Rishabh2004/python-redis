@@ -33,6 +33,9 @@ class SkipList:
         level = self._level()
         self.level = max(self.level, level)
         new_node = Node(member, score, level)
+        if member in self.member_map:
+            self.remove(member)
+
         self.member_map[member] = new_node
         for i in range(level - 1, -1, -1):
             pointer = self.HEAD.levels[i]
@@ -97,3 +100,26 @@ class SkipList:
     def get_score(self, member: str) -> float | None:
         node = self.member_map.get(member)
         return node.score if node else None
+
+    def remove(self, member: str) -> bool:
+        old_node = self.member_map[member]
+        score = old_node.score
+
+        pointer = self.HEAD
+        is_deleted = False
+        for i in range(self.level - 1, -1, -1):
+            next_node = pointer.levels[i]
+
+            while next_node is not None and (
+                next_node.score < score or (next_node.score == score and next_node.member < member)
+            ):
+                pointer = next_node
+                next_node = pointer.levels[i]
+
+            if pointer.levels[i] is old_node:
+                pointer.levels[i] = old_node.levels[i]
+                is_deleted = True
+
+        del self.member_map[member]
+
+        return is_deleted

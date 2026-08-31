@@ -56,6 +56,7 @@ class CommandProcessor:
             "zrange": self._zrange,
             "zcard": self._zcard,
             "zscore": self._zscore,
+            "zrem": self._zrem,
         }
 
     def execute(self, parts: list[str]) -> bytes:
@@ -390,3 +391,21 @@ class CommandProcessor:
             return NIL
 
         return encode_bulk_string(str(member_score))
+
+    def _zrem(self, arguements: list[str]) -> bytes:
+        if len(arguements) != 2:
+            return NIL
+
+        key = arguements[0]
+        member = arguements[1]
+        sset = self.database.get(key, None)
+        if sset is None:
+            return NIL
+
+        if not isinstance(sset["value"], SkipList):
+            return NIL
+
+        if sset["value"].remove(member):
+            return encode_integer(1)
+        else:
+            return encode_integer(0)
