@@ -13,6 +13,7 @@ from .protocol import (
     QUEUED,
     encode_array,
     encode_bulk_string,
+    encode_byte_array,
     encode_integer,
     error,
 )
@@ -31,6 +32,12 @@ def _current_time_ms() -> int:
     return int(time.time() * 1000)
 
 
+class ThreadData(threading.local):
+    def __init__(self):
+        self.in_transaction = False
+        self.command_queue = []
+
+
 class CommandProcessor:
     """Dispatch parsed commands against an in-memory database."""
 
@@ -41,7 +48,8 @@ class CommandProcessor:
     ) -> None:
         self.database = DATABASE if database is None else database
         self._clock_ms = clock_ms
-        self.in_transcation: bool = False
+        self.thread_obj = ThreadData()
+
         self._handlers: dict[str, CommandHandler] = {
             "ping": self._ping,
             "echo": self._echo,
@@ -62,6 +70,8 @@ class CommandProcessor:
             "zrem": self._zrem,
             "incr": self._incr,
             "multi": self._multi,
+            "exec": self._exec,
+            "discard": self._discard,
         }
 
     def execute(self, parts: list[str]) -> bytes:
@@ -70,6 +80,11 @@ class CommandProcessor:
         handler = self._handlers.get(command)
         if handler is None:
             return OK
+        if command == "discard":
+            return handler(parts[1:])
+        if self.thread_obj.in_transaction is True and command != "exec":
+            self.thread_obj.commmand_queue.append(parts)
+            return QUEUED
         return handler(parts[1:])
 
     def _ping(self, _arguments: list[str]) -> bytes:
@@ -449,7 +464,28 @@ class CommandProcessor:
                     return error("ERR value is not an integer or out of range")
 
     def _multi(self, _: list[str]) -> bytes:
-        self.in_transcation = True
-        if self.in_transcation is True:
-            self.commmand_queue = []
-        return QUEUED
+        self.thread_obj.in_transaction = True
+        self.thread_obj.commmand_queue = []
+        return OK
+
+    def _exec(self, _: list[str]) -> bytes:
+        if self.thread_obj.in_transaction is False:
+            return error("ERR EXEC without MULTI")
+        else:
+            if len(self.thread_obj.commmand_queue) == 0:
+                return EMPTY_ARRAY
+            self.thread_obj.in_transaction = False
+            res_buff = []
+            while self.thread_obj.commmand_queue:
+                parts = self.thread_obj.commmand_queue.pop(0)
+                res_buff.append(self.execute(parts))
+
+            return encode_byte_array(res_buff)
+
+    def _discard(self, _: list[str]) -> bytes:
+        if self.thread_obj.in_transaction:
+            self.thread_obj.commmand_queue.clear()
+            self.thread_obj.in_transaction = False
+            return OK
+        else:
+            return error("ERR DISCARD without MULTI")

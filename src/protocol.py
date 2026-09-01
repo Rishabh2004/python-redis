@@ -32,9 +32,17 @@ def parse_resp(data: str) -> list[str]:
 def encode_array(values: list[str]) -> bytes:
     """Encode strings as a RESP array of bulk strings."""
     response = f"*{len(values)}\r\n"
+
     for value in values:
         response += f"${len(value)}\r\n{value}\r\n"
     return response.encode()
+
+
+def encode_byte_array(values: list[bytes]) -> bytes:
+    """Encode byte arrau as a RESP array of bytes."""
+    prefix = b"*" + str(len(values)).encode() + b"\r\n"
+    response = b"".join(values)
+    return prefix + response
 
 
 def encode_bulk_string(value: str) -> bytes:
