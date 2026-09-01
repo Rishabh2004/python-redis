@@ -72,6 +72,7 @@ class CommandProcessor:
             "multi": self._multi,
             "exec": self._exec,
             "discard": self._discard,
+            "type": self._type,
         }
 
     def execute(self, parts: list[str]) -> bytes:
@@ -87,14 +88,27 @@ class CommandProcessor:
             return QUEUED
         return handler(parts[1:])
 
-    def _ping(self, _arguments: list[str]) -> bytes:
-        return encode_bulk_string("pong")
+    def _ping(self, _args: list[str]) -> bytes:
+        return b"+PONG\r\n"
 
-    def _echo(self, arguments: list[str]) -> bytes:
-        return encode_array(arguments)
+    def _echo(self, args: list[str]) -> bytes:
+        return encode_array(args)
 
-    def _set(self, arguments: list[str]) -> bytes:
-        key, value = arguments[0], arguments[1]
+    def _type(self, args: list[str]) -> bytes:
+        if len(args) != 1:
+            return error("INVALID COMMAND")
+
+        key = args[0]
+
+        data = self.database.get(key, None)
+
+        if data is None:
+            return encode_bulk_string("none")
+        else:
+            return encode_bulk_string(str(data["type"]))
+
+    def _set(self, args: list[str]) -> bytes:
+        key, value = args[0], args[1]
 
         try:
             value = int(value)
@@ -102,8 +116,8 @@ class CommandProcessor:
         except ValueError:
             v_type = "string"
 
-        if len(arguments) == 4:
-            option, duration = arguments[2], arguments[3]
+        if len(args) == 4:
+            option, duration = args[2], args[3]
             if option == "px":
                 self.database[key] = {
                     "value": value,
@@ -123,8 +137,8 @@ class CommandProcessor:
 
         return OK
 
-    def _get(self, arguments: list[str]) -> bytes:
-        key = arguments[0]
+    def _get(self, args: list[str]) -> bytes:
+        key = args[0]
         entry = self.database.get(key)
         if entry is None:
             return NIL
@@ -162,34 +176,34 @@ class CommandProcessor:
         px = self._as_int(entry.get("px"))
         return px is not None and inserted + px < current_time
 
-    def _rpush(self, arguments: list[str]) -> bytes:
-        if len(arguments) < 2:
+    def _rpush(self, args: list[str]) -> bytes:
+        if len(args) < 2:
             return NIL
 
-        key = arguments[0]
+        key = args[0]
         entry = self.database.setdefault(key, {"value": []})
         values = entry["value"]
         if not isinstance(values, list):
             raise TypeError("Stored value does not support append")
 
         with condition:
-            for argument in arguments[1:]:
+            for argument in args[1:]:
                 value = int(argument) if argument.isnumeric() else argument
                 if len(values) == 0:
                     values.append(value)
-                    shared_buff.append([key, arguments[1]])
+                    shared_buff.append([key, args[1]])
                     condition.notify(1)
                     continue
                 values.append(value)
 
         return encode_integer(len(values))
 
-    def _lrange(self, arguments: list[str]) -> bytes:
-        if len(arguments) < 3:
+    def _lrange(self, args: list[str]) -> bytes:
+        if len(args) < 3:
             return NIL
 
-        key = arguments[0]
-        start, end = int(arguments[1]), int(arguments[2])
+        key = args[0]
+        start, end = int(args[1]), int(args[2])
         entry = self.database.get(key)
         if not entry:
             return EMPTY_ARRAY
@@ -219,27 +233,27 @@ class CommandProcessor:
 
         return response
 
-    def _lpush(self, arguments: list[str]) -> bytes:
-        if len(arguments) < 2:
+    def _lpush(self, args: list[str]) -> bytes:
+        if len(args) < 2:
             return NIL
 
-        key = arguments[0]
+        key = args[0]
         entry = self.database.setdefault(key, {"value": []})
         values = entry["value"]
         temp_arr = []
         if not isinstance(values, list):
             raise TypeError("Stored value does not support append")
 
-        for arguement in arguments[len(arguments) - 1 : 0 : -1]:
+        for arguement in args[len(args) - 1 : 0 : -1]:
             temp_arr.append(int(arguement) if arguement.isnumeric() else arguement)
 
         values.extend(temp_arr)
         return encode_integer(len(values))
 
-    def _llen(self, arguments: list[str]) -> bytes:
-        if len(arguments) != 1:
+    def _llen(self, args: list[str]) -> bytes:
+        if len(args) != 1:
             return NIL
-        key = arguments[0]
+        key = args[0]
         entry = self.database.get(key)
         if entry is None:
             return encode_integer(0)
@@ -318,7 +332,7 @@ class CommandProcessor:
         score = float(args[1])
         member = args[2]
 
-        sset: StoredValue = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
+        sset: StoredValue = self.database.setdefault(key, {"value": SkipList(), "type": "zset"})
         if not isinstance(sset["value"], SkipList):
             return NIL
 
@@ -489,3 +503,4 @@ class CommandProcessor:
             return OK
         else:
             return error("ERR DISCARD without MULTI")
+    

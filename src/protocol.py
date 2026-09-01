@@ -5,7 +5,6 @@ EMPTY_ARRAY: bytes = b"*0\r\n"
 OK: bytes = b"+OK\r\n"
 QUEUED: bytes = b"+QUEUED\r\n"
 
-
 def parse_resp(data: str) -> list[str]:
     """Parse a RESP array containing bulk strings.
 
