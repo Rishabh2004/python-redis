@@ -102,24 +102,27 @@ class SkipList:
         return node.score if node else None
 
     def remove(self, member: str) -> bool:
-        old_node = self.member_map[member]
-        score = old_node.score
-
-        pointer = self.HEAD
+        old_node = self.member_map.get(member, None)
         is_deleted = False
-        for i in range(self.level - 1, -1, -1):
-            next_node = pointer.levels[i]
 
-            while next_node is not None and (
-                next_node.score < score or (next_node.score == score and next_node.member < member)
-            ):
-                pointer = next_node
+        if old_node is not None:
+            score = old_node.score
+
+            pointer = self.HEAD
+            for i in range(self.level - 1, -1, -1):
                 next_node = pointer.levels[i]
 
-            if pointer.levels[i] is old_node:
-                pointer.levels[i] = old_node.levels[i]
-                is_deleted = True
+                while next_node is not None and (
+                    next_node.score < score
+                    or (next_node.score == score and next_node.member < member)
+                ):
+                    pointer = next_node
+                    next_node = pointer.levels[i]
 
-        del self.member_map[member]
+                if pointer.levels[i] is old_node:
+                    pointer.levels[i] = old_node.levels[i]
+                    is_deleted = True
+
+            del self.member_map[member]
 
         return is_deleted

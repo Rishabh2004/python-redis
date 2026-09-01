@@ -10,9 +10,11 @@ from .protocol import (
     EMPTY_ARRAY,
     NIL,
     OK,
+    QUEUED,
     encode_array,
     encode_bulk_string,
     encode_integer,
+    error,
 )
 
 type StoredValue = dict[str, object]
@@ -39,6 +41,7 @@ class CommandProcessor:
     ) -> None:
         self.database = DATABASE if database is None else database
         self._clock_ms = clock_ms
+        self.in_transcation: bool = False
         self._handlers: dict[str, CommandHandler] = {
             "ping": self._ping,
             "echo": self._echo,
@@ -57,6 +60,8 @@ class CommandProcessor:
             "zcard": self._zcard,
             "zscore": self._zscore,
             "zrem": self._zrem,
+            "incr": self._incr,
+            "multi": self._multi,
         }
 
     def execute(self, parts: list[str]) -> bytes:
@@ -76,6 +81,12 @@ class CommandProcessor:
     def _set(self, arguments: list[str]) -> bytes:
         key, value = arguments[0], arguments[1]
 
+        try:
+            value = int(value)
+            v_type = "int"
+        except ValueError:
+            v_type = "string"
+
         if len(arguments) == 4:
             option, duration = arguments[2], arguments[3]
             if option == "px":
@@ -83,15 +94,17 @@ class CommandProcessor:
                     "value": value,
                     "px": int(duration),
                     "inserted": self._clock_ms(),
+                    "type": v_type,
                 }
             elif option == "mx":
                 self.database[key] = {
                     "value": value,
                     "mx": int(duration) * 1000,
                     "inserted": self._clock_ms(),
+                    "type": v_type,
                 }
         else:
-            self.database[key] = {"value": value}
+            self.database[key] = {"value": value, "type": v_type}
 
         return OK
 
@@ -107,9 +120,11 @@ class CommandProcessor:
 
         value = entry["value"]
         if isinstance(value, str):
-            return f"${len(value)}\r\n{value}\r\n".encode()
+            return encode_bulk_string(value)
         if isinstance(value, list):
-            return f"${len(value)}\r\n{value}\r\n".encode()
+            return encode_array(value)
+        if isinstance(value, int):
+            return encode_bulk_string(str(value))
         return NIL
 
     def _as_int(self, value: object) -> int | None:
@@ -218,12 +233,12 @@ class CommandProcessor:
 
         return encode_integer(len(entry["value"]))
 
-    def _lpop(self, arguements: list[str]) -> bytes:
-        args_len = len(arguements)
+    def _lpop(self, args: list[str]) -> bytes:
+        args_len = len(args)
         if args_len > 2 and args_len < 1:
             return NIL
 
-        key = arguements[0]
+        key = args[0]
         entry = self.database.get(key)
 
         if entry is None:
@@ -243,13 +258,13 @@ class CommandProcessor:
 
         return encode_bulk_string(str(entry["value"].pop(0)))
 
-    def _blpop(self, arguements: list[str]) -> bytes:
-        args_len = len(arguements)
+    def _blpop(self, args: list[str]) -> bytes:
+        args_len = len(args)
         if args_len != 2:
             return NIL
 
-        key = arguements[0]
-        timeout = float(arguements[1])
+        key = args[0]
+        timeout = float(args[1])
         entry = self.database.setdefault(key, {"value": []})
 
         if not isinstance(entry["value"], list):
@@ -278,15 +293,15 @@ class CommandProcessor:
         print(self.database)
         return OK
 
-    def _zadd(self, arguements: list[str]) -> bytes:
-        args_len = len(arguements)
+    def _zadd(self, args: list[str]) -> bytes:
+        args_len = len(args)
 
         if args_len != 3:
             return NIL
 
-        key = arguements[0]
-        score = float(arguements[1])
-        member = arguements[2]
+        key = args[0]
+        score = float(args[1])
+        member = args[2]
 
         sset: StoredValue = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
         if not isinstance(sset["value"], SkipList):
@@ -300,12 +315,12 @@ class CommandProcessor:
 
         return encode_integer(0)
 
-    def _zrank(self, arguements: list[str]) -> bytes:
-        if len(arguements) != 2:
+    def _zrank(self, args: list[str]) -> bytes:
+        if len(args) != 2:
             return NIL
 
-        key = arguements[0]
-        member = arguements[1]
+        key = args[0]
+        member = args[1]
 
         sset = self.database.setdefault(key, {"value": SkipList(), "type": "sset"})
         if not isinstance(sset["value"], SkipList):
@@ -319,12 +334,12 @@ class CommandProcessor:
             _, rank = sset["value"].search(member, member_node_score)
             return encode_integer(rank)
 
-    def _zrange(self, arguements: list[str]) -> bytes:
-        if len(arguements) < 3:
+    def _zrange(self, args: list[str]) -> bytes:
+        if len(args) < 3:
             return NIL
 
-        key = arguements[0]
-        start, end = int(arguements[1]), int(arguements[2])
+        key = args[0]
+        start, end = int(args[1]), int(args[2])
 
         sset = self.database.get(key, None)
         if sset is None:
@@ -356,13 +371,13 @@ class CommandProcessor:
 
             pointer = pointer.levels[0]
             idx += 1
-        print(result)
+
         return encode_array(result)
 
-    def _zcard(self, arguements: list[str]) -> bytes:
-        if len(arguements) != 1:
+    def _zcard(self, args: list[str]) -> bytes:
+        if len(args) != 1:
             return NIL
-        key = arguements[0]
+        key = args[0]
 
         sset = self.database.get(key, None)
         if sset is None:
@@ -373,11 +388,11 @@ class CommandProcessor:
 
         return encode_integer(sset["value"].elements)
 
-    def _zscore(self, arguements: list[str]) -> bytes:
-        if len(arguements) != 2:
+    def _zscore(self, args: list[str]) -> bytes:
+        if len(args) != 2:
             return NIL
-        key = arguements[0]
-        member = arguements[1]
+        key = args[0]
+        member = args[1]
         sset = self.database.get(key, None)
         if sset is None:
             return NIL
@@ -392,12 +407,12 @@ class CommandProcessor:
 
         return encode_bulk_string(str(member_score))
 
-    def _zrem(self, arguements: list[str]) -> bytes:
-        if len(arguements) != 2:
+    def _zrem(self, args: list[str]) -> bytes:
+        if len(args) != 2:
             return NIL
 
-        key = arguements[0]
-        member = arguements[1]
+        key = args[0]
+        member = args[1]
         sset = self.database.get(key, None)
         if sset is None:
             return NIL
@@ -409,3 +424,32 @@ class CommandProcessor:
             return encode_integer(1)
         else:
             return encode_integer(0)
+
+    def _incr(self, args: list[str]) -> bytes:
+        if len(args) != 1:
+            return NIL
+
+        key = args[0]
+
+        if key not in self.database:
+            self.database[key] = {"value": 1, "type": "int"}
+            return encode_integer(1)
+        else:
+            data = self.database[key]
+
+            if data["type"] == "string" and isinstance(data["type"], str):
+                return error("ERR value is not an integer or out of range")
+            else:
+                if isinstance(data["value"], int):
+                    val = data["value"]
+                    val = val + 1
+                    data["value"] = val
+                    return encode_integer(val)
+                else:
+                    return error("ERR value is not an integer or out of range")
+
+    def _multi(self, _: list[str]) -> bytes:
+        self.in_transcation = True
+        if self.in_transcation is True:
+            self.commmand_queue = []
+        return QUEUED

@@ -75,6 +75,7 @@ class RedisServer:
                     args=(connection, address, self.processor),
                 ).start()
         except KeyboardInterrupt:
-            LOGGER.info("Server is stopping")
+            LOGGER.info("SERVER IS STOPPING")
         finally:
             server.close()
+            LOGGER.info("SERVER STOPPED RUNNING")

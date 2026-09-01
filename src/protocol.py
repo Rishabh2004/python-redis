@@ -3,6 +3,7 @@
 NIL: bytes = b"$-1\r\n"
 EMPTY_ARRAY: bytes = b"*0\r\n"
 OK: bytes = b"+OK\r\n"
+QUEUED: bytes = b"+QUEUED\r\n"
 
 
 def parse_resp(data: str) -> list[str]:
@@ -44,3 +45,8 @@ def encode_bulk_string(value: str) -> bytes:
 def encode_integer(value: int) -> bytes:
     """Encode an integer as a RESP integer."""
     return f":{value}\r\n".encode()
+
+
+def error(msg: str) -> bytes:
+    """Encode an error message as RESP Error."""
+    return f"-{msg}\r\n".encode()
