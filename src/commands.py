@@ -3,6 +3,7 @@
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from src.skiplist import SkipList
 
@@ -21,6 +22,12 @@ from .protocol import (
 type StoredValue = dict[str, object]
 type Database = dict[str, StoredValue]
 type CommandHandler = Callable[[list[str]], bytes]
+
+DIR = Path.cwd() / "redis-data"
+DIR.mkdir(exist_ok=True)
+DBFILE = DIR / "rdbfile"
+DBFILE.touch(exist_ok=True)
+
 
 DATABASE: Database = {}
 
@@ -503,4 +510,3 @@ class CommandProcessor:
             return OK
         else:
             return error("ERR DISCARD without MULTI")
-    

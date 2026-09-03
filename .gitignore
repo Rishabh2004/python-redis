@@ -13,3 +13,5 @@ wheels/
 
 *.log
 commands.txt
+
+redis-data/
