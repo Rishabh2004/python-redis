@@ -1,59 +1,69 @@
-"""Helpers for decoding requests and encoding RESP responses."""
+class RespProtocol:
+    NIL: bytes = b"$-1\r\n"
+    EMPTY_ARRAY: bytes = b"*0\r\n"
+    OK: bytes = b"+OK\r\n"
+    QUEUED: bytes = b"+QUEUED\r\n"
+    PONG: bytes = b"+PONG\r\n"
 
-NIL: bytes = b"$-1\r\n"
-EMPTY_ARRAY: bytes = b"*0\r\n"
-OK: bytes = b"+OK\r\n"
-QUEUED: bytes = b"+QUEUED\r\n"
+    @staticmethod
+    def parse(data: str) -> list[str]:
+        """Parse a RESP array containing bulk strings.
 
-def parse_resp(data: str) -> list[str]:
-    """Parse a RESP array containing bulk strings.
+        The server currently accepts one complete command per socket read. Stream
+        buffering can be added here later without coupling it to command handling.
+        """
+        lines = data.split("\r\n")
+        if not lines[0].startswith("*"):
+            raise ValueError("Expected RESP array")
 
-    The server currently accepts one complete command per socket read. Stream
-    buffering can be added here later without coupling it to command handling.
-    """
-    lines = data.split("\r\n")
-    if not lines[0].startswith("*"):
-        raise ValueError("Expected RESP array")
+        count = int(lines[0][1:])
+        values: list[str] = []
+        index = 1
+        for _ in range(count):
+            length_line = lines[index]
+            if not length_line.startswith("$"):
+                raise ValueError("Expected bulk string")
+            values.append(lines[index + 1])
+            index += 2
 
-    count = int(lines[0][1:])
-    values: list[str] = []
-    index = 1
-    for _ in range(count):
-        length_line = lines[index]
-        if not length_line.startswith("$"):
-            raise ValueError("Expected bulk string")
-        values.append(lines[index + 1])
-        index += 2
+        return values
 
-    return values
+    @staticmethod
+    def response(values: list[bytes]) -> bytes:
+        prefix = b"*" + str(len(values)).encode() + b"\r\n"
+        response = b"".join(values)
+        return prefix + response
 
+    @staticmethod
+    def array(values: list[str]) -> bytes:
+        buff = f"*{len(values)}\r\n"
 
-def encode_array(values: list[str]) -> bytes:
-    """Encode strings as a RESP array of bulk strings."""
-    response = f"*{len(values)}\r\n"
+        for value in values:
+            buff += f"${len(value)}\r\n{value}\r\n"
 
-    for value in values:
-        response += f"${len(value)}\r\n{value}\r\n"
-    return response.encode()
+        return buff.encode()
 
+    @staticmethod
+    def integer(value: int) -> bytes:
+        return f":{value}\r\n".encode()
 
-def encode_byte_array(values: list[bytes]) -> bytes:
-    """Encode byte arrau as a RESP array of bytes."""
-    prefix = b"*" + str(len(values)).encode() + b"\r\n"
-    response = b"".join(values)
-    return prefix + response
+    @staticmethod
+    def bulk_string(value: str) -> bytes:
+        return f"${len(value)}\r\n{value}\r\n".encode()
 
+    @staticmethod
+    def error(msg: str) -> bytes:
+        return f"-{msg}\r\n".encode()
 
-def encode_bulk_string(value: str) -> bytes:
-    """Encode a string as a RESP bulk string."""
-    return f"${len(value)}\r\n{value}\r\n".encode()
-
-
-def encode_integer(value: int) -> bytes:
-    """Encode an integer as a RESP integer."""
-    return f":{value}\r\n".encode()
-
-
-def error(msg: str) -> bytes:
-    """Encode an error message as RESP Error."""
-    return f"-{msg}\r\n".encode()
+    @classmethod
+    def encode_value(cls, value: object) -> bytes:
+        """Choose the RESP representation for a Python value."""
+        if isinstance(value, bool):
+            raise TypeError("Boolean values are not supported")
+        if isinstance(value, int):
+            return cls.integer(value)
+        if isinstance(value, str):
+            return cls.bulk_string(value)
+        if isinstance(value, list):
+            return cls.response([cls.encode_value(item) for item in value])
+        return cls.NIL

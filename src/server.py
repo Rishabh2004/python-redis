@@ -1,81 +1,76 @@
-"""TCP server lifecycle and connection handling."""
-
 import logging
 import os
 import socket
 import threading
 
-from .commands import CommandProcessor
-from .protocol import parse_resp
+from src.commands import CommandProcessor
+from src.config import RedisConf
+from src.protocol import RespProtocol
 
-LOGGER = logging.getLogger(__name__)
-DEFAULT_HOST = "localhost"
-DEFAULT_PORT = 6379
-BUFFER_SIZE = 1024
-
-DEFAULT_PROCESSOR = CommandProcessor()
-
-
-def handle_connection(
-    client_connection: socket.socket,
-    client_address: object,
-    processor: CommandProcessor | None = None,
-) -> None:
-    """Read and process commands until a client disconnects."""
-    command_processor = processor or DEFAULT_PROCESSOR
-
-    try:
-        LOGGER.info("Client connected: %s", client_address)
-        while True:
-            request = client_connection.recv(BUFFER_SIZE)
-            if not request:
-                break
-
-            LOGGER.debug("Received data: %r", request)
-            try:
-                parts = parse_resp(request.decode())
-            except (ValueError, IndexError):
-                continue
-
-            if parts:
-                client_connection.sendall(command_processor.execute(parts))
-    except ConnectionResetError:
-        LOGGER.warning("Connection abruptly lost: %s", client_address)
-
-    finally:
-        client_connection.close()
-        LOGGER.info("Client disconnected: %s", client_address)
+logger = logging.getLogger(__name__)
 
 
 class RedisServer:
-    """A threaded TCP server for the supported Redis commands."""
+    HOST = "locahost"
+    PORT = 6379
+    BUFFER_SIZE = 4096
 
-    def __init__(
-        self,
-        host: str = DEFAULT_HOST,
-        port: int = DEFAULT_PORT,
-        processor: CommandProcessor | None = None,
-    ) -> None:
+    def __init__(self, host: str = HOST, port: int = PORT, buffer_size: int = BUFFER_SIZE):
         self.host = host
         self.port = port
-        self.processor = processor or DEFAULT_PROCESSOR
+        self.buffer_size = buffer_size
+        self.protocol = RespProtocol()
+        self.processor = CommandProcessor()
+        self.conf = RedisConf()
+
+    def handle_connection(self, client: socket.socket, address):
+
+        try:
+            logger.info(f"CLIENT CONNECTED: {address}")
+
+            while request := client.recv(self.buffer_size):
+                logger.debug("REQUEST RECIEVED: %s", request)
+
+                try:
+                    parts = self.protocol.parse(request.decode().lower())
+
+                except (UnicodeDecodeError, ValueError, IndexError):
+                    logger.info("FAILED TO PARSE REQUEST: %s", request)
+                    client.sendall(self.protocol.error("ERR Invalid Request"))
+                    continue
+
+                if parts:
+                    resp = self.processor.execute(parts)
+                    logger.debug("SERVER RESPONDED %s", resp)
+                    client.sendall(resp)
+        except ConnectionResetError:
+            logger.warning("Connection abruptly lost: %s", address)
+        finally:
+            client.close()
+            logger.info("Client disconnected: %s", address)
 
     def serve_forever(self) -> None:
-        """Accept clients until the process receives a keyboard interrupt."""
-        LOGGER.info("SERVER STARTED RUNNING")
-        LOGGER.info("SERVER IS READY TO ACCEPT CONNECTION")
-        LOGGER.info("RUNNING AT PORT 6379")
-        LOGGER.info(f"PID {os.getpid()}")
+        logger.info("SERVER STARTED RUNNING")
+        logger.info("SERVER IS READY TO ACCEPT CONNECTION")
+        logger.info("RUNNING AT PORT %s", self.port)
+        logger.info("PID %s", os.getpid())
         server = socket.create_server((self.host, self.port), reuse_port=True)
+
         try:
             while True:
-                connection, address = server.accept()
-                threading.Thread(
-                    target=handle_connection,
-                    args=(connection, address, self.processor),
-                ).start()
+                try:
+                    conn, addr = server.accept()
+
+                    threading.Thread(
+                        target=self.handle_connection,
+                        args=(conn, addr),
+                        daemon=True,
+                        name=f"redis-client-{addr}",
+                    ).start()
+                except TimeoutError:
+                    continue
         except KeyboardInterrupt:
-            LOGGER.info("SERVER IS STOPPING")
+            logger.info("SERVER IS STOPPING")
         finally:
             server.close()
-            LOGGER.info("SERVER STOPPED RUNNING")
+            logger.info("SERVER STOPPED RUNNING")

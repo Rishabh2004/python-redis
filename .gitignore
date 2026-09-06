@@ -12,6 +12,7 @@ wheels/
 .vscode/
 
 *.log
+temp/
 commands.txt
 
 redis-data/
