@@ -32,7 +32,7 @@ class RedisServer:
                 logger.debug("REQUEST RECIEVED: %s", request)
 
                 try:
-                    parts = self.protocol.parse(request.decode().lower())
+                    parts = self.protocol.parse(request.decode())
 
                 except (UnicodeDecodeError, ValueError, IndexError):
                     logger.info("FAILED TO PARSE REQUEST: %s", request)

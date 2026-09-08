@@ -13,17 +13,17 @@ class Node:
 
 class SkipList:
     def __init__(self, max_level: int = 16):
-        self.MAX_LEVEL = max_level
-        self.P = 0.5
+        self._max_level = max_level
+        self._p = 0.5
         self.level = 1
-        self.HEAD = Node(member="", score=0, height=self.MAX_LEVEL)
+        self._head = Node(member="", score=0, height=self._max_level)
         self.member_map: dict[str, Node] = {}
         self.elements: int = 0
 
     def _level(self) -> int:
         lvl = 1
 
-        while random.random() < self.P and lvl < self.MAX_LEVEL:
+        while random.random() < self._p and lvl < self._max_level:
             lvl += 1
 
         return lvl
@@ -38,15 +38,15 @@ class SkipList:
 
         self.member_map[member] = new_node
         for i in range(level - 1, -1, -1):
-            pointer = self.HEAD.levels[i]
+            pointer = self._head.levels[i]
 
             if pointer is None:
-                self.HEAD.levels[i] = new_node
+                self._head.levels[i] = new_node
                 continue
 
             if pointer.score >= score:
                 new_node.levels[i] = pointer
-                self.HEAD.levels[i] = new_node
+                self._head.levels[i] = new_node
                 continue
 
             while True:
@@ -69,7 +69,7 @@ class SkipList:
         for i in range(self.level - 1, -1, -1):
             print(f"level {i}: HEAD", end="")
 
-            pointer = self.HEAD.levels[i]
+            pointer = self._head.levels[i]
 
             while pointer is not None:
                 print(f" -> {pointer}", end="")
@@ -79,7 +79,7 @@ class SkipList:
 
     def search(self, member: str, score: float) -> tuple[Node | None, int]:
         rank = -1
-        pointer = self.HEAD
+        pointer = self._head
 
         for i in range(self.level - 1, -1, -1):
             next_node = pointer.levels[i]
@@ -108,7 +108,7 @@ class SkipList:
         if old_node is not None:
             score = old_node.score
 
-            pointer = self.HEAD
+            pointer = self._head
             for i in range(self.level - 1, -1, -1):
                 next_node = pointer.levels[i]
 
@@ -124,5 +124,5 @@ class SkipList:
                     is_deleted = True
 
             del self.member_map[member]
-
+            self.elements -= 1
         return is_deleted
