@@ -77,3 +77,7 @@ tests/            # Unit tests
 client.py         # Minimal example client
 main.py           # Server entry point
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
