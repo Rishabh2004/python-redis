@@ -1,38 +1,56 @@
 # Python Redis
 
 An educational, dependency-free Redis-compatible server written in Python. It
-implements a focused subset of RESP commands while keeping protocol parsing,
-command execution, and network concerns separate.
+implements a focused subset of the Redis Serialization Protocol (RESP), with
+separate protocol parsing, command handling, storage, and TCP server layers.
+
+## Features
+
+- Threaded TCP server, listening on `localhost:6379` by default
+- RESP command parsing and response encoding
+- In-memory strings with `px` (milliseconds) and `mx` (seconds) expiry options
+- Lists, including blocking pops
+- Sorted sets backed by a skip list
 
 ## Supported commands
 
-- `PING`
-- `ECHO`
-- `SET` and `GET`, including the existing `px` and `mx` expiry options
-- `RPUSH` and `LRANGE`
+| Type | Commands |
+| --- | --- |
+| Connection | `PING`, `ECHO` |
+| Strings | `SET`, `GET`, `TYPE` |
+| Lists | `RPUSH`, `LPUSH`, `LRANGE`, `LLEN`, `LPOP`, `BLPOP` |
+| Sorted sets | `ZADD`, `ZRANK`, `ZRANGE`, `ZCARD`, `ZSCORE`, `ZREM` |
 
-## Project structure
+## Requirements
 
-```text
-redis_server/
-├── commands.py   # Command registry and in-memory data store
-├── protocol.py   # RESP parsing and response encoding
-└── server.py     # Threaded TCP server lifecycle
-tests/            # Dependency-free unit tests
-client.py         # Minimal example client
-main.py           # Server entry point
-```
+- Python 3.13 or newer
+- [uv](https://docs.astral.sh/uv/) (optional, used in the commands below)
 
 ## Run the server
-
-Python 3.13 or newer is required.
 
 ```bash
 uv run python main.py
 ```
 
-The server listens on `localhost:6379`. In another terminal, run the example
-client:
+The server accepts optional host and port settings:
+
+```bash
+uv run python main.py --host 127.0.0.1 --port 6380 --debug
+```
+
+## Try it with redis-cli
+
+With the server running in one terminal:
+
+```bash
+redis-cli PING
+redis-cli SET greeting hello
+redis-cli GET greeting
+redis-cli ZADD scores 10 alice
+redis-cli ZRANGE scores 0 -1
+```
+
+You can also run the included example client:
 
 ```bash
 uv run python client.py
@@ -42,4 +60,20 @@ uv run python client.py
 
 ```bash
 uv run python -m unittest discover -v
+```
+
+## Project structure
+
+```text
+src/
+├── commands.py   # Command registry and dispatcher
+├── protocol.py   # RESP parsing and response encoding
+├── server.py     # Threaded TCP server lifecycle
+├── store.py      # In-memory storage and expiry state
+├── string.py     # String command handlers
+├── list.py       # List command handlers
+└── zset.py       # Sorted-set command handlers and skip-list integration
+tests/            # Unit tests
+client.py         # Minimal example client
+main.py           # Server entry point
 ```
